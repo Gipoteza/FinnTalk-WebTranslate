@@ -123,9 +123,14 @@ async function handleTranslatePage(tabId: number): Promise<void> {
     })
   } catch (err: any) {
     logError(requestId, 'NETWORK', err.message ?? String(err))
+    // Если content script не загружен — скорее всего страница не перезагружена после установки
+    const isConnectionError = err.message?.includes('Could not establish connection') ||
+      err.message?.includes('Receiving end does not exist')
     chrome.runtime.sendMessage({
       type: 'TRANSLATION_ERROR',
-      message: `Не удалось получить текст страницы: ${err.message}`,
+      message: isConnectionError
+        ? 'Перезагрузите страницу (F5) и попробуйте снова.'
+        : `Не удалось получить текст страницы: ${err.message}`,
     })
     return
   }
