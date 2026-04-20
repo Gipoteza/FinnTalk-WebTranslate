@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Finnish to Russian Translator",
+  "version": "1.0.0",
+  "description": "Автоматический перевод финских веб-страниц на русский язык через ChatGPT API",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://api.openai.com/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Finnish Translator"
+  },
+  "options_page": "options/options.html"
+}

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Finnish Translator</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="container">
+    <h1 class="title">Finnish Translator</h1>
+
+    <div id="topic-display" class="topic-display hidden">
+      <span class="topic-label">Тематика:</span>
+      <span id="topic-text"></span>
+    </div>
+
+    <div class="buttons">
+      <button id="btn-translate" class="btn btn-primary">Перевести страницу</button>
+      <button id="btn-auto-translate" class="btn btn-toggle">Автоперевод</button>
+      <button id="btn-show-original" class="btn btn-secondary">Показать оригинал</button>
+    </div>
+
+    <div class="style-section">
+      <p class="style-label">Стиль перевода:</p>
+      <label class="radio-label">
+        <input type="radio" name="style" value="буквальный" />
+        Буквальный
+      </label>
+      <label class="radio-label">
+        <input type="radio" name="style" value="литературный" />
+        Литературный
+      </label>
+      <label class="radio-label">
+        <input type="radio" name="style" value="нейтральный" />
+        Нейтральный
+      </label>
+    </div>
+
+    <div id="progress" class="progress hidden">
+      <div class="progress-bar">
+        <span id="progress-text">0 / 0</span>
+      </div>
+    </div>
+
+    <div id="error-message" class="error-message hidden">
+      <p id="error-text">Ошибка перевода</p>
+      <a id="open-settings" href="#" class="settings-link">Открыть настройки</a>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
