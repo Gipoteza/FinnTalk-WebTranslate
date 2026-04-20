@@ -1,8 +1,5 @@
-// Popup UI — управление переводом через всплывающую панель расширения
+import type { Topic } from '../types'
 
-import type { TranslationStyle, Topic } from '../types'
-
-// Состояние кнопки "Показать оригинал" / "Показать перевод"
 let showingOriginal = false
 
 function show(el: HTMLElement | null): void {
@@ -24,29 +21,12 @@ async function init(): Promise<void> {
   const errorMessage = document.getElementById('error-message') as HTMLDivElement
   const errorText = document.getElementById('error-text') as HTMLParagraphElement
   const openSettings = document.getElementById('open-settings') as HTMLAnchorElement
-  const styleRadios = document.querySelectorAll<HTMLInputElement>('input[name="style"]')
 
-  // Загрузить настройки из chrome.storage.local
-  const settings = await chrome.storage.local.get([
-    'translationStyle',
-    'autoTranslate',
-  ])
-
-  // Установить активный стиль из настроек
-  const savedStyle: TranslationStyle = settings.translationStyle ?? 'нейтральный'
-  for (const radio of Array.from(styleRadios)) {
-    if (radio.value === savedStyle) {
-      radio.checked = true
-      break
-    }
-  }
-
-  // Установить состояние кнопки автоперевода
+  const settings = await chrome.storage.local.get(['autoTranslate'])
   if (settings.autoTranslate) {
     btnAutoTranslate.classList.add('active')
   }
 
-  // Обработчик: Перевести страницу
   btnTranslate.addEventListener('click', async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
     if (tab?.id == null) return
@@ -56,7 +36,6 @@ async function init(): Promise<void> {
     hide(errorMessage)
   })
 
-  // Обработчик: Автоперевод (toggle)
   btnAutoTranslate.addEventListener('click', () => {
     const enabled = !btnAutoTranslate.classList.contains('active')
     if (enabled) {
@@ -67,11 +46,9 @@ async function init(): Promise<void> {
     chrome.runtime.sendMessage({ type: 'TOGGLE_AUTO_TRANSLATE', enabled })
   })
 
-  // Обработчик: Показать оригинал / Показать перевод
   btnShowOriginal.addEventListener('click', async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
     if (tab?.id == null) return
-
     if (!showingOriginal) {
       chrome.tabs.sendMessage(tab.id, { type: 'RESTORE_ORIGINAL' })
       btnShowOriginal.textContent = 'Показать перевод'
@@ -83,56 +60,23 @@ async function init(): Promise<void> {
     }
   })
 
-  // Обработчик: Изменение стиля
-  for (const radio of Array.from(styleRadios)) {
-    radio.addEventListener('change', () => {
-      if (radio.checked) {
-        chrome.runtime.sendMessage({
-          type: 'CHANGE_STYLE',
-          style: radio.value as TranslationStyle,
-        })
-      }
-    })
-  }
-
-  // Открыть настройки
   openSettings.addEventListener('click', (e) => {
     e.preventDefault()
     chrome.runtime.openOptionsPage()
   })
 
-  // Слушать сообщения от background
   chrome.runtime.onMessage.addListener((message) => {
     if (message.type === 'PROGRESS_UPDATE') {
-      const { done, total, topic } = message as {
-        type: 'PROGRESS_UPDATE'
-        done: number
-        total: number
-        topic: Topic
-      }
+      const { done, total, topic } = message as { type: 'PROGRESS_UPDATE'; done: number; total: number; topic: Topic }
       show(progressEl)
       progressText.textContent = `${done} / ${total}`
-
-      if (topic) {
-        topicText.textContent = topic
-        show(topicDisplay)
-      }
+      if (topic) { topicText.textContent = topic; show(topicDisplay) }
     }
-
     if (message.type === 'TRANSLATION_ERROR') {
-      const { message: msg, openOptions } = message as {
-        type: 'TRANSLATION_ERROR'
-        message: string
-        openOptions?: boolean
-      }
+      const { message: msg, openOptions } = message as { type: 'TRANSLATION_ERROR'; message: string; openOptions?: boolean }
       errorText.textContent = msg
       show(errorMessage)
-
-      if (openOptions) {
-        show(openSettings)
-      } else {
-        hide(openSettings)
-      }
+      if (openOptions) { show(openSettings) } else { hide(openSettings) }
     }
   })
 }
