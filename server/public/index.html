@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FinnTalk — Переводчик финских сайтов</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f1a;
+      color: #cdd6f4;
+      min-height: 100vh;
+    }
+
+    /* HERO */
+    .hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 80px 24px 60px;
+      background: linear-gradient(135deg, #1e1e2e 0%, #181825 100%);
+      border-bottom: 1px solid #313244;
+    }
+
+    .badge {
+      display: inline-block;
+      background: #313244;
+      color: #cba6f7;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 6px 14px;
+      border-radius: 20px;
+      margin-bottom: 24px;
+    }
+
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      font-weight: 700;
+      line-height: 1.15;
+      margin-bottom: 20px;
+      background: linear-gradient(135deg, #cba6f7, #89b4fa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero p {
+      font-size: 1.15rem;
+      color: #a6adc8;
+      max-width: 560px;
+      line-height: 1.7;
+      margin-bottom: 40px;
+    }
+
+    .btn-download {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(135deg, #cba6f7, #89b4fa);
+      color: #1e1e2e;
+      font-size: 1rem;
+      font-weight: 700;
+      padding: 14px 32px;
+      border-radius: 12px;
+      text-decoration: none;
+      transition: opacity 0.2s, transform 0.2s;
+      box-shadow: 0 4px 24px rgba(203, 166, 247, 0.3);
+    }
+
+    .btn-download:hover { opacity: 0.9; transform: translateY(-2px); }
+
+    .btn-download svg { width: 20px; height: 20px; }
+
+    .hint {
+      margin-top: 14px;
+      font-size: 13px;
+      color: #6c7086;
+    }
+
+    /* FEATURES */
+    .section {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 72px 24px;
+    }
+
+    .section-title {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #cdd6f4;
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+    }
+
+    .feature-card {
+      background: #1e1e2e;
+      border: 1px solid #313244;
+      border-radius: 16px;
+      padding: 28px 24px;
+      transition: border-color 0.2s;
+    }
+
+    .feature-card:hover { border-color: #cba6f7; }
+
+    .feature-icon {
+      font-size: 2rem;
+      margin-bottom: 14px;
+    }
+
+    .feature-card h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #cdd6f4;
+      margin-bottom: 8px;
+    }
+
+    .feature-card p {
+      font-size: 14px;
+      color: #a6adc8;
+      line-height: 1.6;
+    }
+
+    /* HOW IT WORKS */
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-width: 640px;
+      margin: 0 auto;
+    }
+
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      background: #1e1e2e;
+      border: 1px solid #313244;
+      border-radius: 12px;
+      padding: 20px 24px;
+    }
+
+    .step-num {
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #cba6f7, #89b4fa);
+      color: #1e1e2e;
+      font-weight: 700;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .step-text h4 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+    .step-text p { font-size: 13px; color: #a6adc8; line-height: 1.5; }
+
+    /* INSTALL */
+    .install-section {
+      background: #181825;
+      border-top: 1px solid #313244;
+      border-bottom: 1px solid #313244;
+    }
+
+    .install-box {
+      background: #1e1e2e;
+      border: 1px solid #313244;
+      border-radius: 16px;
+      padding: 32px;
+      max-width: 640px;
+      margin: 0 auto;
+    }
+
+    .install-box h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 20px;
+      color: #cba6f7;
+    }
+
+    .install-steps {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .install-steps li {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      color: #a6adc8;
+    }
+
+    .install-steps li::before {
+      content: '→';
+      color: #cba6f7;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    code {
+      background: #313244;
+      color: #a6e3a1;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+
+    /* FOOTER */
+    footer {
+      text-align: center;
+      padding: 32px 24px;
+      font-size: 13px;
+      color: #6c7086;
+    }
+
+    footer a { color: #89b4fa; text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <section class="hero">
+    <span class="badge">Chrome Extension · ChatGPT API</span>
+    <h1>Переводчик финских сайтов на русский</h1>
+    <p>Автоматически определяет тематику страницы и переводит текст с учётом контекста — медицина, юриспруденция, IT и другие.</p>
+    <a href="/download" class="btn-download">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Скачать расширение (.zip)
+    </a>
+    <p class="hint">Для Chrome · Manifest V3 · Бесплатно</p>
+  </section>
+
+  <section class="section">
+    <h2 class="section-title">Возможности</h2>
+    <div class="features">
+      <div class="feature-card">
+        <div class="feature-icon">🧠</div>
+        <h3>Умное определение тематики</h3>
+        <p>Расширение автоматически определяет тематику страницы: медицина, юриспруденция, финансы, IT и другие — и подбирает подходящий стиль перевода.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">✍️</div>
+        <h3>Три стиля перевода</h3>
+        <p>Буквальный, литературный или нейтральный — выбирайте стиль под задачу прямо в панели расширения.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">✅</div>
+        <h3>Проверка качества</h3>
+        <p>Опциональный второй проход через ChatGPT исправляет стилистические ошибки и делает текст более естественным.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔄</div>
+        <h3>Показать оригинал</h3>
+        <p>Одна кнопка — и страница возвращается к оригинальному финскому тексту. Переключайтесь без повторных запросов к API.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <h3>Автоперевод</h3>
+        <p>Включите автоматический перевод — и каждая новая финская страница будет переводиться сразу при загрузке.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔐</div>
+        <h3>Безопасность</h3>
+        <p>API-ключ OpenAI хранится только на сервере. Расширение не имеет к нему доступа — ваши данные в безопасности.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="install-section">
+    <div class="section">
+      <h2 class="section-title">Как установить</h2>
+      <div class="install-box">
+        <h3>Установка в Chrome</h3>
+        <ul class="install-steps">
+          <li>Скачайте ZIP-файл расширения по кнопке выше</li>
+          <li>Откройте <code>chrome://extensions/</code> в браузере</li>
+          <li>Включите <strong style="color:#cdd6f4">Режим разработчика</strong> (переключатель справа вверху)</li>
+          <li>Нажмите <strong style="color:#cdd6f4">Загрузить распакованное</strong></li>
+          <li>Распакуйте ZIP и выберите папку с расширением</li>
+          <li>Готово — иконка появится в панели Chrome</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2 class="section-title">Как это работает</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text">
+          <h4>Нажмите «Перевести страницу»</h4>
+          <p>Расширение извлекает текст со страницы и отправляет его на анализ.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text">
+          <h4>Определение тематики</h4>
+          <p>ChatGPT определяет тематику: медицина, юриспруденция, IT и т.д. — и формирует специализированный промпт.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text">
+          <h4>Перевод блоками</h4>
+          <p>Текст разбивается на блоки и переводится последовательно — страница обновляется по мере готовности.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-text">
+          <h4>Результат на странице</h4>
+          <p>Переведённый текст заменяет оригинал без нарушения вёрстки. Кнопка «Показать оригинал» всегда доступна.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>FinnTalk · Переводчик финских сайтов · <a href="https://github.com/Gipoteza/FinnTalk-WebTranslate" target="_blank">GitHub</a></p>
+  </footer>
+
+</body>
+</html>

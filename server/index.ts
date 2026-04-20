@@ -1,16 +1,17 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
 import proxyRoutes from './routes/proxy';
 
 const app = express();
-
-// Порт из переменной окружения или 3000 по умолчанию
 const PORT = process.env.PORT || 3000;
 
-// Настройка CORS: разрешаем только запросы от Chrome-расширений и null (локальное тестирование)
+// Раздача статических файлов (лендинг)
+app.use(express.static(path.join(__dirname, '../public')));
+
+// CORS только для Chrome-расширений
 app.use(cors({
   origin: (origin, callback) => {
-    // Разрешаем запросы без origin (например, curl) и chrome-extension://
     if (!origin || origin === 'null' || origin.startsWith('chrome-extension://')) {
       callback(null, true);
     } else {
@@ -21,20 +22,22 @@ app.use(cors({
   allowedHeaders: ['Content-Type'],
 }));
 
-// Парсинг JSON-тела запроса
 app.use(express.json());
-
-// Подключение маршрутов проксирования
 app.use(proxyRoutes);
 
-// Health check эндпоинт
+// Скачивание ZIP расширения
+app.get('/download', (_req, res) => {
+  const zipPath = path.join(__dirname, '../public/finnish-translator.zip');
+  res.download(zipPath, 'finnish-translator.zip');
+});
+
+// Health check
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Запуск сервера
 app.listen(PORT, () => {
-  console.log(`Proxy сервер запущен на порту ${PORT}`);
+  console.log(`Сервер запущен на порту ${PORT}`);
 });
 
 export default app;

@@ -32,7 +32,7 @@ async function loadSettings(): Promise<ExtensionSettings> {
   return new Promise(resolve => {
     chrome.storage.local.get(
       {
-        proxyUrl: '',
+        proxyUrl: 'https://finntalk-webtranslate-production.up.railway.app',
         model: 'gpt-4o-mini',
         requestsPerMinute: 20,
         qualityCheckEnabled: false,

@@ -3,7 +3,7 @@
 import { ExtensionSettings, GptModel, TranslationStyle } from '../types'
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
-  proxyUrl: '',
+  proxyUrl: 'https://finntalk-webtranslate-production.up.railway.app',
   model: 'gpt-4o-mini',
   requestsPerMinute: 20,
   qualityCheckEnabled: false,

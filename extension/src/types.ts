@@ -39,7 +39,7 @@ export interface TranslationState {
 
 // Настройки расширения (хранятся в chrome.storage.local)
 export interface ExtensionSettings {
-  proxyUrl: string                // URL Railway-прокси (например: https://my-proxy.railway.app)
+  proxyUrl: string                // URL Railway-прокси (по умолчанию вшит в код)
   model: GptModel                 // Модель ChatGPT (по умолчанию: gpt-4o-mini)
   requestsPerMinute: number       // Лимит запросов в минуту (по умолчанию: 20)
   qualityCheckEnabled: boolean    // Включить проверку качества (по умолчанию: false)

@@ -4,7 +4,7 @@
   "description": "Браузерное расширение для перевода финских страниц на русский язык через ChatGPT API",
   "private": true,
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "test": "jest --runInBand",
     "test:run": "jest --runInBand --forceExit"
   },

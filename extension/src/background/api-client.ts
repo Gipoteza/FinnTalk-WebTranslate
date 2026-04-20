@@ -3,12 +3,15 @@
 
 import type { Topic, GptModel } from '../types'
 
+// URL прокси-сервера зашит в расширение
+const DEFAULT_PROXY_URL = 'https://finntalk-webtranslate-production.up.railway.app'
+
 export class ApiClient {
   private proxyUrl: string
   private model: GptModel
 
-  constructor(proxyUrl: string, model: GptModel) {
-    this.proxyUrl = proxyUrl
+  constructor(proxyUrl: string = DEFAULT_PROXY_URL, model: GptModel) {
+    this.proxyUrl = proxyUrl || DEFAULT_PROXY_URL
     this.model = model
   }
 
