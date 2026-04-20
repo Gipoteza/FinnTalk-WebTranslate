@@ -8,11 +8,10 @@
     "activeTab"
   ],
   "host_permissions": [
-    "https://api.openai.com/*"
+    "https://finntalk-webtranslate-production.up.railway.app/*"
   ],
   "background": {
-    "service_worker": "background/service-worker.js",
-    "type": "module"
+    "service_worker": "background/service-worker.js"
   },
   "content_scripts": [
     {
