@@ -28,16 +28,9 @@ async function init(): Promise<void> {
 
   // Загрузить настройки из chrome.storage.local
   const settings = await chrome.storage.local.get([
-    'proxyUrl',
     'translationStyle',
     'autoTranslate',
   ])
-
-  // Если нет proxyUrl — показать ошибку сразу
-  if (!settings.proxyUrl) {
-    errorText.textContent = 'Не указан URL прокси-сервера. Настройте расширение.'
-    show(errorMessage)
-  }
 
   // Установить активный стиль из настроек
   const savedStyle: TranslationStyle = settings.translationStyle ?? 'нейтральный'
