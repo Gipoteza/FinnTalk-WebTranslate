@@ -4,7 +4,6 @@ const path = require('path')
 
 const outdir = 'dist'
 
-// Бандлим все точки входа
 esbuild.buildSync({
   entryPoints: [
     'src/background/service-worker.ts',
@@ -18,7 +17,7 @@ esbuild.buildSync({
   platform: 'browser',
   target: 'chrome110',
   format: 'iife',
-  // service worker не может быть IIFE с globalName, оставляем без него
+  treeShaking: false,  // отключаем tree-shaking чтобы не убирать side effects
 })
 
 // Копируем статику
