@@ -70,8 +70,8 @@ async function handleTranslatePage(tabId: number): Promise<void> {
 
   chrome.runtime.sendMessage({ type: 'PROGRESS_UPDATE', done: 0, total: 1, topic: 'бытовая' })
 
-  // 2. Переводим одним запросом
-  const textToTranslate = rawText.slice(0, 12000)
+  // 2. Переводим одним запросом — ограничиваем 2000 символов для скорости 1-2 сек
+  const textToTranslate = rawText.slice(0, 2000)
   log('translating, length=', textToTranslate.length)
 
   let translatedText: string
@@ -125,6 +125,20 @@ chrome.runtime.onMessage.addListener((message: IncomingMessage, _sender, sendRes
     })
     sendResponse({ ok: true })
     return true
+  }
+
+  if (message.type === 'TRANSLATE_VISIBLE') {
+    const client = new ApiClient(PROXY_URL, 'gpt-4o-mini')
+    queue.enqueue(() => client.translateBlock(
+      (message as any).text,
+      SYSTEM_PROMPT
+    )).then(translatedText => {
+      sendResponse({ translatedText })
+    }).catch(err => {
+      logErr('TRANSLATE_VISIBLE error:', err)
+      sendResponse({ translatedText: null })
+    })
+    return true // async
   }
 
   if (message.type === 'TOGGLE_AUTO_TRANSLATE') {
