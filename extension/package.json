@@ -1,6 +1,6 @@
 {
   "name": "finnish-to-russian-translator",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Браузерное расширение для перевода финских страниц на русский язык через ChatGPT API",
   "private": true,
   "scripts": {
