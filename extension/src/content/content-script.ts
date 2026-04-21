@@ -13,12 +13,8 @@ export function splitIntoBlocks(text: string): TextBlock[] {
   return [{ id: crypto.randomUUID(), text, nodeIds: [] }]
 }
 
-function isInViewport(el: Element): boolean {
-  const r = el.getBoundingClientRect()
-  return r.bottom > 0 && r.top < window.innerHeight && r.right > 0 && r.left < window.innerWidth
-}
-
-function collectNodes(viewportOnly: boolean): Text[] {
+// Собирает ВСЕ текстовые узлы страницы (без фильтра по видимости)
+function collectAllTextNodes(): Text[] {
   const result: Text[] = []
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
@@ -27,9 +23,6 @@ function collectNodes(viewportOnly: boolean): Text[] {
       const tag = p.tagName
       if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT') return NodeFilter.FILTER_REJECT
       if ((node.nodeValue?.trim().length ?? 0) < 2) return NodeFilter.FILTER_SKIP
-      const s = window.getComputedStyle(p)
-      if (s.display === 'none' || s.visibility === 'hidden') return NodeFilter.FILTER_SKIP
-      if (viewportOnly && !isInViewport(p)) return NodeFilter.FILTER_SKIP
       return NodeFilter.FILTER_ACCEPT
     }
   })
@@ -44,8 +37,7 @@ chrome.runtime.onMessage.addListener((message: OutgoingMessage, _sender, sendRes
   log('msg:', message.type)
 
   if (message.type === 'EXTRACT_TEXT') {
-    // Берём только видимые в viewport узлы — это быстро переводится
-    extractedNodes = collectNodes(true)
+    extractedNodes = collectAllTextNodes()
     originalValues = extractedNodes.map(n => n.nodeValue ?? '')
     const rawText = originalValues.join('\n')
     log('extracted nodes=', extractedNodes.length, 'chars=', rawText.length)
@@ -125,20 +117,17 @@ function startObserver(): void {
     }
     if (newNodes.length === 0) return
     log('observer: new nodes=', newNodes.length)
-    const text = newNodes.map(n => n.nodeValue ?? '').join('\n')
+    const text = newNodes.map(n => n.nodeValue ?? '').join('\n').slice(0, 3000)
     chrome.runtime.sendMessage({ type: 'TRANSLATE_VISIBLE', text } as any)
       .then((r: any) => {
         if (!r?.translatedText) return
         const tlines = r.translatedText.split('\n')
         for (let i = 0; i < Math.min(newNodes.length, tlines.length); i++) {
           const t = tlines[i]?.trim()
-          if (t) {
-            translationCache.set(newNodes[i].nodeValue?.trim() ?? '', t)
-            newNodes[i].nodeValue = t
-          }
+          if (t) { translationCache.set(newNodes[i].nodeValue?.trim() ?? '', t); newNodes[i].nodeValue = t }
         }
       })
-      .catch((e: any) => log('observer err:', e))
+      .catch((e: any) => log('observer error:', e))
   })
   observer.observe(document.body, { childList: true, subtree: true })
   log('observer started')
