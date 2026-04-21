@@ -1,6 +1,5 @@
 ﻿import { TextBlock, OutgoingMessage } from '../types'
 
-// Сохраняем узлы при EXTRACT_TEXT и применяем к ним же при APPLY_TRANSLATION
 let extractedNodes: Text[] = []
 let originalValues: string[] = []
 const translationCache = new Map<string, string>()
@@ -14,7 +13,12 @@ export function splitIntoBlocks(text: string): TextBlock[] {
   return [{ id: crypto.randomUUID(), text, nodeIds: [] }]
 }
 
-function collectVisibleNodes(): Text[] {
+function isInViewport(el: Element): boolean {
+  const r = el.getBoundingClientRect()
+  return r.bottom > 0 && r.top < window.innerHeight && r.right > 0 && r.left < window.innerWidth
+}
+
+function collectNodes(viewportOnly: boolean): Text[] {
   const result: Text[] = []
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
@@ -25,6 +29,7 @@ function collectVisibleNodes(): Text[] {
       if ((node.nodeValue?.trim().length ?? 0) < 2) return NodeFilter.FILTER_SKIP
       const s = window.getComputedStyle(p)
       if (s.display === 'none' || s.visibility === 'hidden') return NodeFilter.FILTER_SKIP
+      if (viewportOnly && !isInViewport(p)) return NodeFilter.FILTER_SKIP
       return NodeFilter.FILTER_ACCEPT
     }
   })
@@ -39,7 +44,8 @@ chrome.runtime.onMessage.addListener((message: OutgoingMessage, _sender, sendRes
   log('msg:', message.type)
 
   if (message.type === 'EXTRACT_TEXT') {
-    extractedNodes = collectVisibleNodes()
+    // Берём только видимые в viewport узлы — это быстро переводится
+    extractedNodes = collectNodes(true)
     originalValues = extractedNodes.map(n => n.nodeValue ?? '')
     const rawText = originalValues.join('\n')
     log('extracted nodes=', extractedNodes.length, 'chars=', rawText.length)
@@ -49,7 +55,6 @@ chrome.runtime.onMessage.addListener((message: OutgoingMessage, _sender, sendRes
 
   if (message.type === 'APPLY_TRANSLATION') {
     const fullText = message.translatedParts.join('\n')
-    // Разбиваем перевод на строки — по одной на каждый узел
     const lines = fullText.split('\n')
     log('apply: nodes=', extractedNodes.length, 'lines=', lines.length)
 
@@ -85,7 +90,6 @@ chrome.runtime.onMessage.addListener((message: OutgoingMessage, _sender, sendRes
       if (cached) extractedNodes[i].nodeValue = cached
     }
     isTranslated = true
-    log('show translation')
     return false
   }
 
@@ -109,7 +113,6 @@ function startObserver(): void {
             const v = node.nodeValue?.trim() ?? ''
             if (v.length < 2) return NodeFilter.FILTER_SKIP
             if (translationCache.has(v)) {
-              // Уже есть в кэше — применяем сразу
               node.nodeValue = translationCache.get(v)!
               return NodeFilter.FILTER_SKIP
             }
@@ -122,7 +125,7 @@ function startObserver(): void {
     }
     if (newNodes.length === 0) return
     log('observer: new nodes=', newNodes.length)
-    const text = newNodes.map(n => n.nodeValue ?? '').join('\n').slice(0, 3000)
+    const text = newNodes.map(n => n.nodeValue ?? '').join('\n')
     chrome.runtime.sendMessage({ type: 'TRANSLATE_VISIBLE', text } as any)
       .then((r: any) => {
         if (!r?.translatedText) return
@@ -135,7 +138,7 @@ function startObserver(): void {
           }
         }
       })
-      .catch((e: any) => log('observer translate error:', e))
+      .catch((e: any) => log('observer err:', e))
   })
   observer.observe(document.body, { childList: true, subtree: true })
   log('observer started')

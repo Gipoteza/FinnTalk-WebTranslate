@@ -4,12 +4,12 @@ import type { TextBlock, ExtensionSettings } from '../types'
 
 const PROXY_URL = 'https://finntalk-webtranslate-production.up.railway.app'
 const SYSTEM_PROMPT = 'Ты профессиональный переводчик с финского на русский язык. Переводи точно и естественно. Возвращай только перевод без комментариев.'
-const MAX_CHARS = 2000
+const CHUNK_SIZE = 3000
 
 const queue = new RequestQueue()
 
 function log(...a: unknown[]): void { console.log('[FT]', ...a) }
-function err(...a: unknown[]): void { console.error('[FT ERR]', ...a) }
+function logErr(...a: unknown[]): void { console.error('[FT ERR]', ...a) }
 
 async function getSettings(): Promise<ExtensionSettings> {
   return new Promise(r => chrome.storage.local.get({
@@ -18,9 +18,26 @@ async function getSettings(): Promise<ExtensionSettings> {
   }, s => r(s as ExtensionSettings)))
 }
 
-async function translate(text: string, model: string): Promise<string> {
+// Разбивает текст на чанки по границам строк
+function splitIntoChunks(text: string, size: number): string[] {
+  const chunks: string[] = []
+  const lines = text.split('\n')
+  let current = ''
+  for (const line of lines) {
+    if (current.length + line.length + 1 > size && current.length > 0) {
+      chunks.push(current)
+      current = line
+    } else {
+      current = current ? current + '\n' + line : line
+    }
+  }
+  if (current) chunks.push(current)
+  return chunks
+}
+
+async function translateChunk(text: string, model: string): Promise<string> {
   const client = new ApiClient(PROXY_URL, model as any)
-  return queue.enqueue(() => client.translateBlock(text.slice(0, MAX_CHARS), SYSTEM_PROMPT))
+  return queue.enqueue(() => client.translateBlock(text, SYSTEM_PROMPT))
 }
 
 async function handleTranslatePage(tabId: number): Promise<void> {
@@ -42,7 +59,7 @@ async function handleTranslatePage(tabId: number): Promise<void> {
     blocks = res.blocks
     log('extracted chars=', rawText.length)
   } catch (e: any) {
-    err('EXTRACT_TEXT:', e.message)
+    logErr('EXTRACT_TEXT:', e.message)
     chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: 'Перезагрузите страницу (F5) и попробуйте снова.' })
     return
   }
@@ -52,15 +69,24 @@ async function handleTranslatePage(tabId: number): Promise<void> {
     return
   }
 
-  chrome.runtime.sendMessage({ type: 'PROGRESS_UPDATE', done: 0, total: 1, topic: 'бытовая' })
+  // 2. Разбиваем на чанки и переводим параллельно
+  const chunks = splitIntoChunks(rawText, CHUNK_SIZE)
+  log('chunks=', chunks.length)
+  chrome.runtime.sendMessage({ type: 'PROGRESS_UPDATE', done: 0, total: chunks.length, topic: 'бытовая' })
 
-  // 2. Переводим
-  let translated: string
+  let translatedChunks: string[]
   try {
-    translated = await translate(rawText, settings.model)
-    log('translated chars=', translated.length)
+    translatedChunks = await Promise.all(
+      chunks.map((chunk, i) =>
+        translateChunk(chunk, settings.model).then(t => {
+          chrome.runtime.sendMessage({ type: 'PROGRESS_UPDATE', done: i + 1, total: chunks.length, topic: 'бытовая' })
+          return t
+        })
+      )
+    )
+    log('all chunks translated')
   } catch (e: any) {
-    err('translate:', e.message, 'code=', e.code)
+    logErr('translate:', e.message, 'code=', e.code)
     const msg = e.code === 401 ? 'Ошибка авторизации. Проверьте OPENAI_API_KEY на Railway.'
       : e.code === 429 ? 'Превышен лимит запросов.'
       : `Ошибка: ${e.message}`
@@ -68,18 +94,17 @@ async function handleTranslatePage(tabId: number): Promise<void> {
     return
   }
 
-  chrome.runtime.sendMessage({ type: 'PROGRESS_UPDATE', done: 1, total: 1, topic: 'бытовая' })
-
-  // 3. Применяем
+  // 3. Применяем весь перевод одним сообщением
+  const fullTranslation = translatedChunks.join('\n')
   try {
     await new Promise<void>((resolve, reject) => {
-      chrome.tabs.sendMessage(tabId, { type: 'APPLY_TRANSLATION', translatedParts: [translated] }, r => {
+      chrome.tabs.sendMessage(tabId, { type: 'APPLY_TRANSLATION', translatedParts: [fullTranslation] }, r => {
         if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message))
         else { log('applied:', r); resolve() }
       })
     })
   } catch (e: any) {
-    err('APPLY_TRANSLATION:', e.message)
+    logErr('APPLY_TRANSLATION:', e.message)
     chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: 'Перезагрузите страницу (F5) и попробуйте снова.' })
   }
 }
@@ -88,15 +113,15 @@ chrome.runtime.onMessage.addListener((msg: any, _sender, sendResponse) => {
   log('msg:', msg.type)
 
   if (msg.type === 'TRANSLATE_PAGE') {
-    handleTranslatePage(msg.tabId).catch(e => err('unhandled:', e))
+    handleTranslatePage(msg.tabId).catch(e => logErr('unhandled:', e))
     sendResponse({ ok: true })
     return true
   }
 
   if (msg.type === 'TRANSLATE_VISIBLE') {
-    getSettings().then(s => translate(msg.text, s.model))
+    getSettings().then(s => translateChunk(msg.text, s.model))
       .then(t => sendResponse({ translatedText: t }))
-      .catch(e => { err('TRANSLATE_VISIBLE:', e); sendResponse({ translatedText: null }) })
+      .catch(e => { logErr('TRANSLATE_VISIBLE:', e); sendResponse({ translatedText: null }) })
     return true
   }
 
