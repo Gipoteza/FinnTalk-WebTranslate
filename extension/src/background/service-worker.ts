@@ -134,34 +134,27 @@ async function handleTranslatePage(tabId: number): Promise<void> {
     return
   }
 
-  const { rawText, blocks } = extracted
+  const { rawText } = extracted
 
-  // 5. Определяем тематику
+  // 5. Определяем тематику по первым 500 символам (быстро)
   const { queue: q, client } = await getQueueAndClient()
   let topic: Topic
   try {
-    const rawTopic = await q.enqueue(() => client.detectTopic(rawText))
+    const sampleText = rawText.slice(0, 500)
+    const rawTopic = await q.enqueue(() => client.detectTopic(sampleText))
     topic = normalizeTopic(rawTopic as unknown as string)
   } catch (err: any) {
-    const code: number | string = err.code ?? 'NETWORK'
-    logError(requestId, code, err.message ?? String(err))
-    if (err.code === 401) {
-      chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: 'Ошибка авторизации. Проверьте OPENAI_API_KEY на Railway.', openOptions: true })
-    } else if (err.code === 429) {
-      chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: 'Превышен лимит запросов. Попробуйте позже.' })
-    } else {
-      chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: `Ошибка определения тематики: ${err.message}` })
-    }
-    return
+    // При ошибке определения тематики — используем дефолтную и продолжаем
+    logError(requestId, err.code ?? 'NETWORK', err.message ?? String(err))
+    topic = 'бытовая'
   }
 
   chrome.runtime.sendMessage({ type: 'PROGRESS_UPDATE', done: 0, total: 1, topic })
 
-  // 6. Переводим весь текст ОДНИМ запросом (быстро, без разбивки на блоки)
+  // 6. Переводим весь текст ОДНИМ запросом
   const systemPrompt = buildSystemPrompt(topic, settings.translationStyle)
   let translatedText: string
   try {
-    // Ограничиваем текст до 12000 символов чтобы уложиться в лимит токенов
     const textToTranslate = rawText.slice(0, 12000)
     translatedText = await q.enqueue(() => client.translateBlock(textToTranslate, systemPrompt))
   } catch (err: any) {
