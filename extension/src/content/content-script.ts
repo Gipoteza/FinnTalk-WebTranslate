@@ -1,9 +1,28 @@
 ﻿import { TextBlock, OutgoingMessage } from '../types'
 
-let originalHTML: string | null = null
-let translatedHTML: string | null = null
-const translatedBlocks = new Map<string, string>()
+// Хранит оригинальные значения текстовых узлов
+const nodeOriginals = new Map<Text, string>()
+const nodeTranslations = new Map<Text, string>()
 let allBlocks: TextBlock[] = []
+const translatedBlocks = new Map<string, string>()
+
+// Собирает все текстовые узлы страницы (кроме script/style)
+function collectTextNodes(): Text[] {
+  const result: Text[] = []
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const parent = node.parentElement
+      if (!parent) return NodeFilter.FILTER_REJECT
+      const tag = parent.tagName
+      if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT') return NodeFilter.FILTER_REJECT
+      if ((node.nodeValue?.trim().length ?? 0) < 3) return NodeFilter.FILTER_SKIP
+      return NodeFilter.FILTER_ACCEPT
+    }
+  })
+  let node: Text | null
+  while ((node = walker.nextNode() as Text | null)) result.push(node)
+  return result
+}
 
 export function splitIntoBlocks(text: string): TextBlock[] {
   if (text.length === 0) return []
@@ -28,10 +47,16 @@ export function splitIntoBlocks(text: string): TextBlock[] {
 
 chrome.runtime.onMessage.addListener((message: OutgoingMessage, _sender, sendResponse) => {
   if (message.type === 'EXTRACT_TEXT') {
-    originalHTML = document.body.innerHTML
-    translatedHTML = null
+    // Сохраняем оригиналы и собираем текст
+    nodeOriginals.clear()
+    nodeTranslations.clear()
     translatedBlocks.clear()
-    const rawText = document.body.innerText
+    allBlocks = []
+
+    const nodes = collectTextNodes()
+    for (const node of nodes) nodeOriginals.set(node, node.nodeValue ?? '')
+
+    const rawText = nodes.map(n => n.nodeValue ?? '').join(' ')
     allBlocks = splitIntoBlocks(rawText)
     sendResponse({ rawText, blocks: allBlocks })
     return false
@@ -39,37 +64,38 @@ chrome.runtime.onMessage.addListener((message: OutgoingMessage, _sender, sendRes
 
   if (message.type === 'REPLACE_BLOCK') {
     translatedBlocks.set(message.blockId, message.text)
+    // Применяем перевод как только получили все блоки
     if (allBlocks.length > 0 && translatedBlocks.size >= allBlocks.length) {
-      const fullText = allBlocks.map(b => translatedBlocks.get(b.id) ?? b.text).join('\n\n')
-      replacePageText(fullText)
+      applyTranslation()
     }
     return false
   }
 
   if (message.type === 'RESTORE_ORIGINAL') {
-    if (originalHTML !== null) { translatedHTML = document.body.innerHTML; document.body.innerHTML = originalHTML }
+    for (const [node, original] of nodeOriginals) node.nodeValue = original
     return false
   }
 
   if (message.type === 'SHOW_TRANSLATION') {
-    if (translatedHTML !== null) document.body.innerHTML = translatedHTML
+    for (const [node, translated] of nodeTranslations) node.nodeValue = translated
     return false
   }
 
   return false
 })
 
-function replacePageText(translatedText: string): void {
-  if (!originalHTML) return
-  const temp = document.createElement('div')
-  temp.innerHTML = originalHTML
-  const parts = translatedText.split(/\n+/).filter(s => s.trim().length > 0)
+function applyTranslation(): void {
+  // Собираем полный переведённый текст по порядку блоков
+  const fullText = allBlocks.map(b => translatedBlocks.get(b.id) ?? b.text).join(' ')
+  // Разбиваем на части по пробелам/переносам
+  const parts = fullText.split(/\s{2,}|\n+/).filter(s => s.trim().length >= 3)
+
+  const nodes = Array.from(nodeOriginals.keys())
   let idx = 0
-  const walker = document.createTreeWalker(temp, NodeFilter.SHOW_TEXT)
-  let node: Text | null
-  while ((node = walker.nextNode() as Text | null) && idx < parts.length) {
-    if ((node.nodeValue?.trim().length ?? 0) >= 3) node.nodeValue = parts[idx++]
+  for (const node of nodes) {
+    if (idx >= parts.length) break
+    const translated = parts[idx++]
+    node.nodeValue = translated
+    nodeTranslations.set(node, translated)
   }
-  translatedHTML = temp.innerHTML
-  document.body.innerHTML = translatedHTML
 }
