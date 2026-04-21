@@ -1,227 +1,143 @@
-// Фоновый сервис-воркер — центральный координатор расширения
-// Управляет жизненным циклом перевода, очередью запросов и состоянием
-
-import { ApiClient } from './api-client'
+﻿import { ApiClient } from './api-client'
 import { RequestQueue } from './queue'
-import { normalizeTopic, buildSystemPrompt } from './topic-detector'
-import type {
-  TextBlock,
-  TranslationState,
-  ExtensionSettings,
-  IncomingMessage,
-  Topic,
-} from '../types'
+import type { TextBlock, TranslationState, ExtensionSettings, IncomingMessage } from '../types'
 
-// ─── Вспомогательные функции ────────────────────────────────────────────────
+const PROXY_URL = 'https://finntalk-webtranslate-production.up.railway.app'
+const SYSTEM_PROMPT = 'Ты профессиональный переводчик с финского на русский язык. Переводи точно и естественно. Возвращай только перевод без комментариев.'
 
-function logError(requestId: string, code: number | string, message: string): void {
-  console.error(
-    `[FinnishTranslator] ERROR ${new Date().toISOString()} requestId=${requestId} code=${code} message=${message}`
-  )
+function log(...args: unknown[]): void {
+  console.log('[FT]', ...args)
 }
 
-/** Возвращает блоки начиная с currentIndex (включительно) */
-export function getBlocksToProcess(blocks: TextBlock[], currentIndex: number): TextBlock[] {
-  return blocks.slice(currentIndex)
+function logErr(...args: unknown[]): void {
+  console.error('[FT ERROR]', ...args)
 }
-
-// ─── Загрузка настроек ──────────────────────────────────────────────────────
 
 async function loadSettings(): Promise<ExtensionSettings> {
   return new Promise(resolve => {
-    chrome.storage.local.get(
-      {
-        proxyUrl: 'https://finntalk-webtranslate-production.up.railway.app',
-        model: 'gpt-4o-mini',
-        requestsPerMinute: 20,
-        qualityCheckEnabled: false,
-        translationStyle: 'нейтральный',
-        autoTranslate: false,
-      },
-      result => resolve(result as ExtensionSettings)
-    )
+    chrome.storage.local.get({
+      proxyUrl: PROXY_URL,
+      model: 'gpt-4o-mini',
+      requestsPerMinute: 20,
+      qualityCheckEnabled: false,
+      translationStyle: 'нейтральный',
+      autoTranslate: false,
+    }, result => resolve(result as ExtensionSettings))
   })
 }
 
-// ─── Состояние в chrome.storage.session ─────────────────────────────────────
-
-async function saveState(state: TranslationState): Promise<void> {
-  return new Promise(resolve => {
-    chrome.storage.session.set({ translationState: state }, resolve)
-  })
-}
-
-async function loadState(tabId: number): Promise<TranslationState | null> {
-  return new Promise(resolve => {
-    chrome.storage.session.get('translationState', result => {
-      const state = result.translationState as TranslationState | undefined
-      if (state && state.tabId === tabId) {
-        resolve(state)
-      } else {
-        resolve(null)
-      }
-    })
-  })
-}
-
-// ─── Singleton очереди и клиента ─────────────────────────────────────────────
-
-let queue: RequestQueue | null = null
-let apiClient: ApiClient | null = null
-
-async function getQueueAndClient(): Promise<{ queue: RequestQueue; client: ApiClient }> {
-  const settings = await loadSettings()
-  if (!queue) {
-    queue = new RequestQueue()
-  }
-  // Пересоздаём клиент при каждом вызове, чтобы подхватить актуальные настройки
-  apiClient = new ApiClient(settings.proxyUrl, settings.model)
-  return { queue, client: apiClient }
-}
-
-// ─── Обработка TRANSLATE_PAGE ────────────────────────────────────────────────
+const queue = new RequestQueue()
 
 async function handleTranslatePage(tabId: number): Promise<void> {
-  const requestId = `translate-${tabId}-${Date.now()}`
+  log('handleTranslatePage tabId=', tabId)
 
-  // 1. Загружаем настройки
   const settings = await loadSettings()
+  const client = new ApiClient(settings.proxyUrl || PROXY_URL, settings.model)
 
-  // 2. Проверяем наличие proxyUrl
-  if (!settings.proxyUrl) {
-    chrome.runtime.sendMessage({
-      type: 'TRANSLATION_ERROR',
-      message: 'Укажите URL Railway-прокси в настройках расширения.',
-      openOptions: true,
-    })
-    return
-  }
-
-  // 3. Инициализируем состояние
-  const initialState: TranslationState = {
-    tabId,
-    topic: null,
-    style: settings.translationStyle,
-    blocks: [],
-    currentBlockIndex: 0,
-    status: 'detecting',
-  }
-  await saveState(initialState)
-
-  // 4. Запрашиваем извлечение текста из content script
-  let extracted: { rawText: string; blocks: TextBlock[] }
+  // 1. Получаем текст со страницы
+  log('sending EXTRACT_TEXT to tab', tabId)
+  let rawText: string
+  let blocks: TextBlock[]
   try {
-    extracted = await new Promise((resolve, reject) => {
+    const extracted = await new Promise<{ rawText: string; blocks: TextBlock[] }>((resolve, reject) => {
       chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_TEXT' }, response => {
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message))
+        } else if (!response) {
+          reject(new Error('Empty response from content script'))
         } else {
           resolve(response)
         }
       })
     })
+    rawText = extracted.rawText
+    blocks = extracted.blocks
+    log('EXTRACT_TEXT ok, rawText.length=', rawText.length, 'blocks=', blocks.length)
   } catch (err: any) {
-    logError(requestId, 'NETWORK', err.message ?? String(err))
-    // Если content script не загружен — скорее всего страница не перезагружена после установки
-    const isConnectionError = err.message?.includes('Could not establish connection') ||
-      err.message?.includes('Receiving end does not exist')
+    logErr('EXTRACT_TEXT failed:', err.message)
     chrome.runtime.sendMessage({
       type: 'TRANSLATION_ERROR',
-      message: isConnectionError
-        ? 'Перезагрузите страницу (F5) и попробуйте снова.'
-        : `Не удалось получить текст страницы: ${err.message}`,
+      message: 'Перезагрузите страницу (F5) и попробуйте снова.',
     })
     return
   }
 
-  const { rawText } = extracted
-
-  // 5. Определяем тематику по первым 500 символам (быстро)
-  const { queue: q, client } = await getQueueAndClient()
-  let topic: Topic
-  try {
-    const sampleText = rawText.slice(0, 500)
-    const rawTopic = await q.enqueue(() => client.detectTopic(sampleText))
-    topic = normalizeTopic(rawTopic as unknown as string)
-  } catch (err: any) {
-    // При ошибке определения тематики — используем дефолтную и продолжаем
-    logError(requestId, err.code ?? 'NETWORK', err.message ?? String(err))
-    topic = 'бытовая'
-  }
-
-  chrome.runtime.sendMessage({ type: 'PROGRESS_UPDATE', done: 0, total: 1, topic })
-
-  // 6. Переводим весь текст ОДНИМ запросом
-  const systemPrompt = buildSystemPrompt(topic, settings.translationStyle)
-  let translatedText: string
-  try {
-    const textToTranslate = rawText.slice(0, 12000)
-    translatedText = await q.enqueue(() => client.translateBlock(textToTranslate, systemPrompt))
-  } catch (err: any) {
-    const code: number | string = err.code ?? 'NETWORK'
-    logError(requestId, code, err.message ?? String(err))
-    if (err.code === 401) {
-      chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: 'Ошибка авторизации. Проверьте OPENAI_API_KEY на Railway.', openOptions: true })
-    } else if (err.code === 429) {
-      chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: 'Превышен лимит запросов. Попробуйте позже.' })
-    } else {
-      chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: `Ошибка перевода: ${err.message}` })
-    }
+  if (!rawText || rawText.trim().length < 10) {
+    logErr('rawText too short:', rawText?.length)
+    chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: 'На странице не найден текст для перевода.' })
     return
   }
 
-  chrome.runtime.sendMessage({ type: 'PROGRESS_UPDATE', done: 1, total: 1, topic })
+  chrome.runtime.sendMessage({ type: 'PROGRESS_UPDATE', done: 0, total: 1, topic: 'бытовая' })
 
-  // 7. Отправляем перевод в content script одним сообщением
+  // 2. Переводим одним запросом
+  const textToTranslate = rawText.slice(0, 12000)
+  log('translating, length=', textToTranslate.length)
+
+  let translatedText: string
+  try {
+    translatedText = await queue.enqueue(() => client.translateBlock(textToTranslate, SYSTEM_PROMPT))
+    log('translation ok, length=', translatedText.length, 'preview=', translatedText.slice(0, 80))
+  } catch (err: any) {
+    logErr('translateBlock failed:', err.message, 'code=', err.code)
+    const msg = err.code === 401
+      ? 'Ошибка авторизации. Проверьте OPENAI_API_KEY на Railway.'
+      : err.code === 429
+        ? 'Превышен лимит запросов. Попробуйте позже.'
+        : `Ошибка перевода: ${err.message}`
+    chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: msg, openOptions: err.code === 401 })
+    return
+  }
+
+  chrome.runtime.sendMessage({ type: 'PROGRESS_UPDATE', done: 1, total: 1, topic: 'бытовая' })
+
+  // 3. Применяем перевод на странице
+  log('sending APPLY_TRANSLATION to tab', tabId)
   try {
     await new Promise<void>((resolve, reject) => {
       chrome.tabs.sendMessage(tabId, {
         type: 'APPLY_TRANSLATION',
         translatedParts: [translatedText],
       }, response => {
-        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message))
-        else resolve()
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message))
+        } else {
+          log('APPLY_TRANSLATION response:', response)
+          resolve()
+        }
       })
     })
   } catch (err: any) {
-    logError(requestId, 'APPLY', err.message ?? String(err))
+    logErr('APPLY_TRANSLATION failed:', err.message)
     chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: 'Перезагрузите страницу (F5) и попробуйте снова.' })
     return
   }
 
-  // 8. Завершение
-  const finalState = await loadState(tabId)
-  if (finalState) await saveState({ ...finalState, status: 'done' })
+  log('translation complete')
 }
 
-// ─── Обработчик сообщений ────────────────────────────────────────────────────
+chrome.runtime.onMessage.addListener((message: IncomingMessage, _sender, sendResponse) => {
+  log('onMessage:', message.type)
 
-if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
-  chrome.runtime.onMessage.addListener(
-    (message: IncomingMessage, _sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => {
-      if (message.type === 'TRANSLATE_PAGE') {
-        handleTranslatePage(message.tabId).catch(err => {
-          logError(`translate-${message.tabId}`, 'UNHANDLED', String(err))
-        })
-        sendResponse({ ok: true })
-        return true
-      }
+  if (message.type === 'TRANSLATE_PAGE') {
+    handleTranslatePage(message.tabId).catch(err => {
+      logErr('handleTranslatePage unhandled:', err)
+    })
+    sendResponse({ ok: true })
+    return true
+  }
 
-      if (message.type === 'TOGGLE_AUTO_TRANSLATE') {
-        chrome.storage.local.set({ autoTranslate: message.enabled }, () => {
-          sendResponse({ ok: true })
-        })
-        return true
-      }
+  if (message.type === 'TOGGLE_AUTO_TRANSLATE') {
+    chrome.storage.local.set({ autoTranslate: message.enabled }, () => sendResponse({ ok: true }))
+    return true
+  }
 
-      if (message.type === 'CHANGE_STYLE') {
-        chrome.storage.local.set({ translationStyle: message.style }, () => {
-          sendResponse({ ok: true })
-        })
-        return true
-      }
+  if (message.type === 'CHANGE_STYLE') {
+    chrome.storage.local.set({ translationStyle: message.style }, () => sendResponse({ ok: true }))
+    return true
+  }
 
-      return false
-    }
-  )
-}
+  return false
+})
+
+log('service worker loaded')

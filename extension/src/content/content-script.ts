@@ -3,6 +3,9 @@
 const nodeOriginals = new Map<Text, string>()
 const nodeTranslations = new Map<Text, string>()
 
+function log(...args: unknown[]): void { console.log('[FT-CS]', ...args) }
+function logErr(...args: unknown[]): void { console.error('[FT-CS ERROR]', ...args) }
+
 function collectTextNodes(): Text[] {
   const result: Text[] = []
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
@@ -22,61 +25,54 @@ function collectTextNodes(): Text[] {
 
 export function splitIntoBlocks(text: string): TextBlock[] {
   if (text.length === 0) return []
-  const breakRegex = /[.!?](?=\s|$)/g
-  const breakPositions: number[] = []
-  let m: RegExpExecArray | null
-  while ((m = breakRegex.exec(text)) !== null) breakPositions.push(m.index + m[0].length)
-  const sentences: string[] = []
-  let pos = 0
-  for (const bp of breakPositions) { if (bp > pos) { sentences.push(text.slice(pos, bp)); pos = bp } }
-  if (pos < text.length) sentences.push(text.slice(pos))
-  if (sentences.length === 0) return [{ id: crypto.randomUUID(), text, nodeIds: [] }]
-  const blocks: TextBlock[] = []
-  let current = ''
-  for (const sentence of sentences) {
-    current += sentence
-    if (current.length >= 2000) { blocks.push({ id: crypto.randomUUID(), text: current, nodeIds: [] }); current = '' }
-  }
-  if (current.length > 0) blocks.push({ id: crypto.randomUUID(), text: current, nodeIds: [] })
-  return blocks
+  return [{ id: crypto.randomUUID(), text, nodeIds: [] }]
 }
 
+log('content script loaded, url=', location.href)
+
 chrome.runtime.onMessage.addListener((message: OutgoingMessage, _sender, sendResponse) => {
+  log('onMessage:', message.type)
+
   if (message.type === 'EXTRACT_TEXT') {
     nodeOriginals.clear()
     nodeTranslations.clear()
     const nodes = collectTextNodes()
     for (const node of nodes) nodeOriginals.set(node, node.nodeValue ?? '')
-    const rawText = nodes.map(n => n.nodeValue ?? '').join(' ')
+    const rawText = nodes.map(n => n.nodeValue ?? '').join('\n')
     const blocks = splitIntoBlocks(rawText)
+    log('EXTRACT_TEXT: nodes=', nodes.length, 'rawText.length=', rawText.length)
     sendResponse({ rawText, blocks })
     return false
   }
 
   if (message.type === 'APPLY_TRANSLATION') {
-    const parts = message.translatedParts
-      .join(' ')
-      .split(/\s{2,}|\n+/)
-      .filter(s => s.trim().length >= 3)
+    log('APPLY_TRANSLATION: parts=', message.translatedParts.length, 'total chars=', message.translatedParts.join('').length)
+    const fullText = message.translatedParts.join('\n')
+    // Разбиваем по переносам строк — каждая строка соответствует одному текстовому узлу
+    const lines = fullText.split('\n').filter(s => s.trim().length >= 1)
+    log('lines count=', lines.length, 'nodes count=', nodeOriginals.size)
     const nodes = Array.from(nodeOriginals.keys())
     let idx = 0
     for (const node of nodes) {
-      if (idx >= parts.length) break
-      const translated = parts[idx++]
+      if (idx >= lines.length) break
+      const translated = lines[idx++]
       node.nodeValue = translated
       nodeTranslations.set(node, translated)
     }
+    log('applied', idx, 'translations')
     sendResponse({ ok: true })
     return false
   }
 
   if (message.type === 'RESTORE_ORIGINAL') {
     for (const [node, original] of nodeOriginals) node.nodeValue = original
+    log('restored original')
     return false
   }
 
   if (message.type === 'SHOW_TRANSLATION') {
     for (const [node, translated] of nodeTranslations) node.nodeValue = translated
+    log('showed translation')
     return false
   }
 
