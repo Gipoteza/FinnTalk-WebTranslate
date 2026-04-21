@@ -15,7 +15,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "https://*.fi/*",
+        "https://*.fi",
+        "http://*.fi/*",
+        "http://*.fi"
+      ],
       "js": ["content/content-script.js"],
       "run_at": "document_idle"
     }

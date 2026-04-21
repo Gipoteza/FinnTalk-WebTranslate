@@ -3,7 +3,7 @@ import { RequestQueue } from './queue'
 import type { TextBlock, ExtensionSettings } from '../types'
 
 const PROXY_URL = 'https://finntalk-webtranslate-production.up.railway.app'
-const SYSTEM_PROMPT = 'Ты профессиональный переводчик с финского на русский язык. Переводи точно и естественно. Возвращай только перевод без комментариев.'
+const SYSTEM_PROMPT = 'Ты профессиональный переводчик с финского на русский язык. Переводи точно и естественно. ВАЖНО: возвращай ТОЛЬКО чистый текст перевода без какого-либо форматирования, без Markdown, без звёздочек, без решёток, без тире в начале строк, без HTML-тегов. Каждую строку оригинала переводи отдельной строкой в том же порядке.'
 const CHUNK_SIZE = 3000
 
 const queue = new RequestQueue()
@@ -37,7 +37,15 @@ function splitIntoChunks(text: string, size: number): string[] {
 
 async function translateChunk(text: string, model: string): Promise<string> {
   const client = new ApiClient(PROXY_URL, model as any)
-  return queue.enqueue(() => client.translateBlock(text, SYSTEM_PROMPT))
+  const raw = await queue.enqueue(() => client.translateBlock(text, SYSTEM_PROMPT))
+  // Убираем Markdown-форматирование из ответа
+  return raw
+    .replace(/\*\*(.*?)\*\*/g, '$1')   // **жирный** -> жирный
+    .replace(/\*(.*?)\*/g, '$1')        // *курсив* -> курсив
+    .replace(/^#{1,6}\s+/gm, '')        // # Заголовок -> Заголовок
+    .replace(/^[-*+]\s+/gm, '')         // - пункт -> пункт
+    .replace(/`{1,3}(.*?)`{1,3}/g, '$1') // `код` -> код
+    .trim()
 }
 
 async function handleTranslatePage(tabId: number): Promise<void> {
