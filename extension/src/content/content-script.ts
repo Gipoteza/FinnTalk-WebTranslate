@@ -34,18 +34,29 @@ chrome.runtime.onMessage.addListener((message: OutgoingMessage, _sender, sendRes
     const rawText = document.body.innerText
     allBlocks = splitIntoBlocks(rawText)
     sendResponse({ rawText, blocks: allBlocks })
-  } else if (message.type === 'REPLACE_BLOCK') {
+    return false
+  }
+
+  if (message.type === 'REPLACE_BLOCK') {
     translatedBlocks.set(message.blockId, message.text)
     if (allBlocks.length > 0 && translatedBlocks.size >= allBlocks.length) {
       const fullText = allBlocks.map(b => translatedBlocks.get(b.id) ?? b.text).join('\n\n')
       replacePageText(fullText)
     }
-  } else if (message.type === 'RESTORE_ORIGINAL') {
-    if (originalHTML !== null) { translatedHTML = document.body.innerHTML; document.body.innerHTML = originalHTML }
-  } else if (message.type === 'SHOW_TRANSLATION') {
-    if (translatedHTML !== null) document.body.innerHTML = translatedHTML
+    return false
   }
-  return true
+
+  if (message.type === 'RESTORE_ORIGINAL') {
+    if (originalHTML !== null) { translatedHTML = document.body.innerHTML; document.body.innerHTML = originalHTML }
+    return false
+  }
+
+  if (message.type === 'SHOW_TRANSLATION') {
+    if (translatedHTML !== null) document.body.innerHTML = translatedHTML
+    return false
+  }
+
+  return false
 })
 
 function replacePageText(translatedText: string): void {
