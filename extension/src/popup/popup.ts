@@ -1,5 +1,3 @@
-import type { Topic } from '../types'
-
 let showingOriginal = false
 
 function show(el: HTMLElement | null): void {
@@ -14,8 +12,6 @@ async function init(): Promise<void> {
   const btnTranslate = document.getElementById('btn-translate') as HTMLButtonElement
   const btnAutoTranslate = document.getElementById('btn-auto-translate') as HTMLButtonElement
   const btnShowOriginal = document.getElementById('btn-show-original') as HTMLButtonElement
-  const topicDisplay = document.getElementById('topic-display') as HTMLDivElement
-  const topicText = document.getElementById('topic-text') as HTMLSpanElement
   const progressEl = document.getElementById('progress') as HTMLDivElement
   const progressText = document.getElementById('progress-text') as HTMLSpanElement
   const errorMessage = document.getElementById('error-message') as HTMLDivElement
@@ -67,10 +63,9 @@ async function init(): Promise<void> {
 
   chrome.runtime.onMessage.addListener((message) => {
     if (message.type === 'PROGRESS_UPDATE') {
-      const { done, total, topic } = message as { type: 'PROGRESS_UPDATE'; done: number; total: number; topic: Topic }
+      const { done, total } = message as { type: 'PROGRESS_UPDATE'; done: number; total: number }
       show(progressEl)
       progressText.textContent = `${done} / ${total}`
-      if (topic) { topicText.textContent = topic; show(topicDisplay) }
     }
     if (message.type === 'TRANSLATION_ERROR') {
       const { message: msg, openOptions } = message as { type: 'TRANSLATION_ERROR'; message: string; openOptions?: boolean }
