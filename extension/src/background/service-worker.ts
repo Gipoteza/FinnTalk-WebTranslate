@@ -185,8 +185,10 @@ async function handleTranslatePage(tabId: number): Promise<void> {
     topic,
   })
 
-  // 7. Переводим каждый блок
+  // 7. Переводим все блоки, накапливаем результат
   const blocksToProcess = getBlocksToProcess(blocks, 0)
+  const translatedParts: string[] = []
+
   for (let i = 0; i < blocksToProcess.length; i++) {
     const block = blocksToProcess[i]
     const systemPrompt = buildSystemPrompt(topic, settings.translationStyle)
@@ -197,68 +199,49 @@ async function handleTranslatePage(tabId: number): Promise<void> {
     } catch (err: any) {
       const code: number | string = err.code ?? 'NETWORK'
       logError(requestId, code, err.message ?? String(err))
-
       if (err.code === 401) {
-        chrome.runtime.sendMessage({
-          type: 'TRANSLATION_ERROR',
-          message: 'Ошибка авторизации на Railway-прокси. Проверьте OPENAI_API_KEY.',
-          openOptions: true,
-        })
+        chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: 'Ошибка авторизации. Проверьте OPENAI_API_KEY на Railway.', openOptions: true })
       } else if (err.code === 429) {
-        chrome.runtime.sendMessage({
-          type: 'TRANSLATION_ERROR',
-          message: 'Превышен лимит запросов к API. Попробуйте позже.',
-        })
+        chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: 'Превышен лимит запросов. Попробуйте позже.' })
       } else {
-        chrome.runtime.sendMessage({
-          type: 'TRANSLATION_ERROR',
-          message: `Сетевая ошибка при переводе блока ${i + 1}: ${err.message}`,
-        })
+        chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: `Ошибка перевода блока ${i + 1}: ${err.message}` })
       }
       return
     }
 
-    // Опциональная проверка качества
     let finalText = translatedText
     if (settings.qualityCheckEnabled) {
       try {
         finalText = await q.enqueue(() => client.qualityCheck(block.text, translatedText))
-      } catch (err: any) {
-        const code: number | string = err.code ?? 'NETWORK'
-        logError(requestId, code, err.message ?? String(err))
-        // При ошибке quality check используем перевод без проверки
-        finalText = translatedText
-      }
+      } catch { finalText = translatedText }
     }
 
-    // Отправляем замену в content script
-    chrome.tabs.sendMessage(tabId, {
-      type: 'REPLACE_BLOCK',
-      blockId: block.id,
-      text: finalText,
-    })
+    translatedParts.push(finalText)
 
-    // Обновляем прогресс
-    const done = i + 1
-    chrome.runtime.sendMessage({
-      type: 'PROGRESS_UPDATE',
-      done,
-      total: blocks.length,
-      topic,
-    })
-
-    // Сохраняем текущий индекс
-    const currentState = await loadState(tabId)
-    if (currentState) {
-      await saveState({ ...currentState, currentBlockIndex: done })
-    }
+    // Обновляем прогресс в popup
+    chrome.runtime.sendMessage({ type: 'PROGRESS_UPDATE', done: i + 1, total: blocks.length, topic })
   }
 
-  // 8. Завершение
+  // 8. Отправляем весь перевод одним сообщением — content script точно жив
+  try {
+    await new Promise<void>((resolve, reject) => {
+      chrome.tabs.sendMessage(tabId, {
+        type: 'APPLY_TRANSLATION',
+        translatedParts,
+      }, response => {
+        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message))
+        else resolve()
+      })
+    })
+  } catch (err: any) {
+    logError(requestId, 'APPLY', err.message ?? String(err))
+    chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: 'Перезагрузите страницу (F5) и попробуйте снова.' })
+    return
+  }
+
+  // 9. Завершение
   const finalState = await loadState(tabId)
-  if (finalState) {
-    await saveState({ ...finalState, status: 'done' })
-  }
+  if (finalState) await saveState({ ...finalState, status: 'done' })
 }
 
 // ─── Обработчик сообщений ────────────────────────────────────────────────────

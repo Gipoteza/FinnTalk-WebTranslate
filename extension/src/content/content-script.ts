@@ -1,12 +1,8 @@
 ﻿import { TextBlock, OutgoingMessage } from '../types'
 
-// Хранит оригинальные значения текстовых узлов
 const nodeOriginals = new Map<Text, string>()
 const nodeTranslations = new Map<Text, string>()
-let allBlocks: TextBlock[] = []
-const translatedBlocks = new Map<string, string>()
 
-// Собирает все текстовые узлы страницы (кроме script/style)
 function collectTextNodes(): Text[] {
   const result: Text[] = []
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
@@ -47,27 +43,30 @@ export function splitIntoBlocks(text: string): TextBlock[] {
 
 chrome.runtime.onMessage.addListener((message: OutgoingMessage, _sender, sendResponse) => {
   if (message.type === 'EXTRACT_TEXT') {
-    // Сохраняем оригиналы и собираем текст
     nodeOriginals.clear()
     nodeTranslations.clear()
-    translatedBlocks.clear()
-    allBlocks = []
-
     const nodes = collectTextNodes()
     for (const node of nodes) nodeOriginals.set(node, node.nodeValue ?? '')
-
     const rawText = nodes.map(n => n.nodeValue ?? '').join(' ')
-    allBlocks = splitIntoBlocks(rawText)
-    sendResponse({ rawText, blocks: allBlocks })
+    const blocks = splitIntoBlocks(rawText)
+    sendResponse({ rawText, blocks })
     return false
   }
 
-  if (message.type === 'REPLACE_BLOCK') {
-    translatedBlocks.set(message.blockId, message.text)
-    // Применяем перевод как только получили все блоки
-    if (allBlocks.length > 0 && translatedBlocks.size >= allBlocks.length) {
-      applyTranslation()
+  if (message.type === 'APPLY_TRANSLATION') {
+    const parts = message.translatedParts
+      .join(' ')
+      .split(/\s{2,}|\n+/)
+      .filter(s => s.trim().length >= 3)
+    const nodes = Array.from(nodeOriginals.keys())
+    let idx = 0
+    for (const node of nodes) {
+      if (idx >= parts.length) break
+      const translated = parts[idx++]
+      node.nodeValue = translated
+      nodeTranslations.set(node, translated)
     }
+    sendResponse({ ok: true })
     return false
   }
 
@@ -83,19 +82,3 @@ chrome.runtime.onMessage.addListener((message: OutgoingMessage, _sender, sendRes
 
   return false
 })
-
-function applyTranslation(): void {
-  // Собираем полный переведённый текст по порядку блоков
-  const fullText = allBlocks.map(b => translatedBlocks.get(b.id) ?? b.text).join(' ')
-  // Разбиваем на части по пробелам/переносам
-  const parts = fullText.split(/\s{2,}|\n+/).filter(s => s.trim().length >= 3)
-
-  const nodes = Array.from(nodeOriginals.keys())
-  let idx = 0
-  for (const node of nodes) {
-    if (idx >= parts.length) break
-    const translated = parts[idx++]
-    node.nodeValue = translated
-    nodeTranslations.set(node, translated)
-  }
-}

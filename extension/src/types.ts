@@ -58,6 +58,7 @@ export type IncomingMessage =
 export type OutgoingMessage =
   | { type: 'EXTRACT_TEXT' }
   | { type: 'REPLACE_BLOCK'; blockId: string; text: string }
+  | { type: 'APPLY_TRANSLATION'; translatedParts: string[] }
   | { type: 'RESTORE_ORIGINAL' }
   | { type: 'SHOW_TRANSLATION' }
   | { type: 'PROGRESS_UPDATE'; done: number; total: number; topic: Topic }
