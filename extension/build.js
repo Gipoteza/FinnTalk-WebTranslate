@@ -29,9 +29,29 @@ const copies = [
   ['manifest.json', 'dist/manifest.json'],
 ]
 
+// Копируем иконки если они существуют
+const iconFiles = ['icon16.png', 'icon48.png', 'icon128.png']
+for (const icon of iconFiles) {
+  const src = `src/icons/${icon}`
+  const dest = `dist/icons/${icon}`
+  if (fs.existsSync(src)) {
+    copies.push([src, dest])
+  }
+}
+
 for (const [src, dest] of copies) {
   fs.mkdirSync(path.dirname(dest), { recursive: true })
   fs.copyFileSync(src, dest)
+}
+
+// Копируем иконки
+const iconSizes = [16, 32, 48, 128]
+fs.mkdirSync('dist/icons', { recursive: true })
+for (const size of iconSizes) {
+  const iconPath = `icons/icon${size}.png`
+  if (fs.existsSync(iconPath)) {
+    fs.copyFileSync(iconPath, `dist/icons/icon${size}.png`)
+  }
 }
 
 console.log('Build complete')
