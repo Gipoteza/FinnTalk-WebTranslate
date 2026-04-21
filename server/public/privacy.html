@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Политика конфиденциальности — FinnTalk</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f1a;
+      color: #cdd6f4;
+      min-height: 100vh;
+      padding: 48px 24px;
+    }
+    .container { max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 2rem; font-weight: 700; color: #cba6f7; margin-bottom: 8px; }
+    .subtitle { color: #6c7086; font-size: 14px; margin-bottom: 40px; }
+    h2 { font-size: 1.1rem; font-weight: 600; color: #cdd6f4; margin: 32px 0 12px; }
+    p { color: #a6adc8; line-height: 1.7; margin-bottom: 12px; font-size: 15px; }
+    ul { color: #a6adc8; line-height: 1.7; margin: 0 0 12px 20px; font-size: 15px; }
+    li { margin-bottom: 6px; }
+    a { color: #89b4fa; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .back { display: inline-block; margin-bottom: 32px; color: #89b4fa; font-size: 14px; }
+    .highlight {
+      background: #1e1e2e;
+      border: 1px solid #313244;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 16px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back">← На главную</a>
+    <h1>Политика конфиденциальности</h1>
+    <p class="subtitle">Последнее обновление: апрель 2025</p>
+
+    <h2>1. Общие положения</h2>
+    <p>Расширение FinnTalk («Расширение») предназначено для автоматического перевода финских веб-страниц на русский язык. Настоящая политика описывает, какие данные обрабатываются при использовании Расширения.</p>
+
+    <h2>2. Какие данные обрабатываются</h2>
+    <div class="highlight">
+      <p><strong style="color:#cdd6f4">Текст веб-страниц</strong> — текстовое содержимое страниц, которые пользователь выбирает для перевода. Текст передаётся на прокси-сервер для обработки через OpenAI API.</p>
+    </div>
+    <p>Расширение <strong style="color:#cdd6f4">не собирает и не хранит</strong>:</p>
+    <ul>
+      <li>Личные данные пользователя (имя, email, адрес)</li>
+      <li>Историю посещённых страниц</li>
+      <li>Данные форм или паролей</li>
+      <li>Финансовую информацию</li>
+    </ul>
+
+    <h2>3. Как используются данные</h2>
+    <p>Текст страницы передаётся исключительно для выполнения перевода:</p>
+    <ul>
+      <li>Текст отправляется на прокси-сервер <strong style="color:#cdd6f4">finntalk-webtranslate-production.up.railway.app</strong></li>
+      <li>Прокси-сервер передаёт текст в OpenAI API для перевода</li>
+      <li>Переведённый текст возвращается в браузер и отображается на странице</li>
+      <li>Текст не сохраняется на серверах после обработки запроса</li>
+    </ul>
+
+    <h2>4. Разрешения расширения</h2>
+    <p><strong style="color:#cdd6f4">activeTab</strong> — используется для чтения текста активной вкладки при нажатии кнопки «Перевести страницу». Расширение не имеет доступа к другим вкладкам.</p>
+    <p><strong style="color:#cdd6f4">storage</strong> — используется для сохранения настроек расширения (выбранная модель, лимиты запросов) локально в браузере пользователя. Данные не передаются третьим лицам.</p>
+    <p><strong style="color:#cdd6f4">Доступ к хосту</strong> — расширение обращается только к <code style="background:#313244;padding:2px 6px;border-radius:4px">finntalk-webtranslate-production.up.railway.app</code> для выполнения перевода.</p>
+
+    <h2>5. Удалённый код</h2>
+    <p>Расширение не загружает и не выполняет удалённый код. Все скрипты расширения включены в ZIP-пакет. Обращения к внешнему серверу — только API-запросы для перевода текста.</p>
+
+    <h2>6. Передача данных третьим лицам</h2>
+    <p>Текст страниц передаётся в OpenAI для выполнения перевода в соответствии с <a href="https://openai.com/policies/privacy-policy" target="_blank">политикой конфиденциальности OpenAI</a>. Данные не передаются другим третьим лицам.</p>
+
+    <h2>7. Безопасность</h2>
+    <p>API-ключ OpenAI хранится исключительно в переменных окружения сервера Railway и никогда не передаётся в браузер пользователя.</p>
+
+    <h2>8. Контакты</h2>
+    <p>По вопросам конфиденциальности: <a href="https://github.com/Gipoteza/FinnTalk-WebTranslate" target="_blank">GitHub репозиторий</a></p>
+  </div>
+</body>
+</html>
