@@ -10,7 +10,6 @@ import type {
   ExtensionSettings,
   IncomingMessage,
   Topic,
-  TranslationStyle,
 } from '../types'
 
 // ─── Вспомогательные функции ────────────────────────────────────────────────
@@ -146,88 +145,46 @@ async function handleTranslatePage(tabId: number): Promise<void> {
   } catch (err: any) {
     const code: number | string = err.code ?? 'NETWORK'
     logError(requestId, code, err.message ?? String(err))
-
     if (err.code === 401) {
-      chrome.runtime.sendMessage({
-        type: 'TRANSLATION_ERROR',
-        message: 'Ошибка авторизации на Railway-прокси. Проверьте OPENAI_API_KEY.',
-        openOptions: true,
-      })
+      chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: 'Ошибка авторизации. Проверьте OPENAI_API_KEY на Railway.', openOptions: true })
     } else if (err.code === 429) {
-      chrome.runtime.sendMessage({
-        type: 'TRANSLATION_ERROR',
-        message: 'Превышен лимит запросов к API. Попробуйте позже.',
-      })
+      chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: 'Превышен лимит запросов. Попробуйте позже.' })
     } else {
-      chrome.runtime.sendMessage({
-        type: 'TRANSLATION_ERROR',
-        message: `Сетевая ошибка при определении тематики: ${err.message}`,
-      })
+      chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: `Ошибка определения тематики: ${err.message}` })
     }
     return
   }
 
-  // 6. Обновляем состояние и отправляем прогресс с тематикой
-  const stateAfterTopic: TranslationState = {
-    tabId,
-    topic,
-    style: settings.translationStyle,
-    blocks,
-    currentBlockIndex: 0,
-    status: 'translating',
-  }
-  await saveState(stateAfterTopic)
+  chrome.runtime.sendMessage({ type: 'PROGRESS_UPDATE', done: 0, total: 1, topic })
 
-  chrome.runtime.sendMessage({
-    type: 'PROGRESS_UPDATE',
-    done: 0,
-    total: blocks.length,
-    topic,
-  })
-
-  // 7. Переводим все блоки, накапливаем результат
-  const blocksToProcess = getBlocksToProcess(blocks, 0)
-  const translatedParts: string[] = []
-
-  for (let i = 0; i < blocksToProcess.length; i++) {
-    const block = blocksToProcess[i]
-    const systemPrompt = buildSystemPrompt(topic, settings.translationStyle)
-
-    let translatedText: string
-    try {
-      translatedText = await q.enqueue(() => client.translateBlock(block.text, systemPrompt))
-    } catch (err: any) {
-      const code: number | string = err.code ?? 'NETWORK'
-      logError(requestId, code, err.message ?? String(err))
-      if (err.code === 401) {
-        chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: 'Ошибка авторизации. Проверьте OPENAI_API_KEY на Railway.', openOptions: true })
-      } else if (err.code === 429) {
-        chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: 'Превышен лимит запросов. Попробуйте позже.' })
-      } else {
-        chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: `Ошибка перевода блока ${i + 1}: ${err.message}` })
-      }
-      return
+  // 6. Переводим весь текст ОДНИМ запросом (быстро, без разбивки на блоки)
+  const systemPrompt = buildSystemPrompt(topic, settings.translationStyle)
+  let translatedText: string
+  try {
+    // Ограничиваем текст до 12000 символов чтобы уложиться в лимит токенов
+    const textToTranslate = rawText.slice(0, 12000)
+    translatedText = await q.enqueue(() => client.translateBlock(textToTranslate, systemPrompt))
+  } catch (err: any) {
+    const code: number | string = err.code ?? 'NETWORK'
+    logError(requestId, code, err.message ?? String(err))
+    if (err.code === 401) {
+      chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: 'Ошибка авторизации. Проверьте OPENAI_API_KEY на Railway.', openOptions: true })
+    } else if (err.code === 429) {
+      chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: 'Превышен лимит запросов. Попробуйте позже.' })
+    } else {
+      chrome.runtime.sendMessage({ type: 'TRANSLATION_ERROR', message: `Ошибка перевода: ${err.message}` })
     }
-
-    let finalText = translatedText
-    if (settings.qualityCheckEnabled) {
-      try {
-        finalText = await q.enqueue(() => client.qualityCheck(block.text, translatedText))
-      } catch { finalText = translatedText }
-    }
-
-    translatedParts.push(finalText)
-
-    // Обновляем прогресс в popup
-    chrome.runtime.sendMessage({ type: 'PROGRESS_UPDATE', done: i + 1, total: blocks.length, topic })
+    return
   }
 
-  // 8. Отправляем весь перевод одним сообщением — content script точно жив
+  chrome.runtime.sendMessage({ type: 'PROGRESS_UPDATE', done: 1, total: 1, topic })
+
+  // 7. Отправляем перевод в content script одним сообщением
   try {
     await new Promise<void>((resolve, reject) => {
       chrome.tabs.sendMessage(tabId, {
         type: 'APPLY_TRANSLATION',
-        translatedParts,
+        translatedParts: [translatedText],
       }, response => {
         if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message))
         else resolve()
@@ -239,7 +196,7 @@ async function handleTranslatePage(tabId: number): Promise<void> {
     return
   }
 
-  // 9. Завершение
+  // 8. Завершение
   const finalState = await loadState(tabId)
   if (finalState) await saveState({ ...finalState, status: 'done' })
 }
